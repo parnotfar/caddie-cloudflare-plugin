@@ -1,0 +1,45 @@
+{
+  "buildCommand": "make build",
+  "distDir": "dist",
+  "projectName": "parnotfar",
+  "productionBranch": "main",
+  "hostnames": [
+    "https://parnotfar.com/",
+    "https://www.parnotfar.com/"
+  ],
+  "htmlEntries": [
+    "/index.html",
+    "/course-report/index.html"
+  ],
+  "staticPrefixes": [
+    "/assets/",
+    "/course-report/assets/"
+  ],
+  "spaPrefixes": [
+    "/course-report/"
+  ],
+  "spaStaticPrefixes": [
+    "/course-report/collateral/",
+    "/course-report/data/",
+    "/course-report/images/"
+  ],
+  "documentRoutes": [
+    "/course-report/",
+    "/course-report/courses/poplar-creek",
+    "/course-report/courses/poplar-creek/holes/1",
+    "/course-report/courses/poplar-creek/holes/1/planner",
+    "/course-report/profile"
+  ],
+  "retryAttempts": 8,
+  "retryDelayMs": 3000,
+  "forbiddenPatterns": [
+    "https?://(127\\.0\\.0\\.1|localhost):(54321|5174|5176)",
+    "sb_secret_",
+    "service_role_key",
+    "SUPABASE_SERVICE_ROLE",
+    "VITE_OAUTH_CLIENT_ID"
+  ],
+  "requiredPatterns": [],
+  "workerSourceDir": "apps/site/public",
+  "userAgent": "caddie-cloudflare pages verifier"
+}

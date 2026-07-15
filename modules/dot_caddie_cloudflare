@@ -1,0 +1,464 @@
+#!/usr/bin/env bash
+
+# Caddie Cloudflare Plugin - Pages publish with SPA asset guards
+# Optional plugin: install into ~/.caddie_modules, then caddie reload.
+
+source "$HOME/.caddie_modules/.caddie_cli"
+
+CADDIE_CLOUDFLARE_PLUGIN_VERSION="1.0.0"
+CADDIE_CLOUDFLARE_SHARE_DIR="${CADDIE_CLOUDFLARE_SHARE_DIR:-$HOME/.caddie_modules/caddie-cloudflare-plugin}"
+
+function caddie_cloudflare_description() {
+    printf '%s\n' 'Cloudflare Pages publish with SPA asset guards and live verification'
+    return 0
+}
+
+function caddie_cloudflare_version() {
+    caddie cli:blue "caddie-cloudflare-plugin ${CADDIE_CLOUDFLARE_PLUGIN_VERSION}"
+    return 0
+}
+
+# --- Config: explicit Wrangler path (get/set/unset) ---
+
+function caddie_cloudflare_wrangler_set() {
+    local value="$1"
+
+    if [ -z "$value" ]; then
+        caddie cli:red "Error: Please provide a path to the Wrangler CLI"
+        caddie cli:usage "caddie cloudflare:wrangler:set <path>"
+        return 1
+    fi
+
+    if [ ! -x "$value" ]; then
+        caddie cli:red "Error: Not an executable file: $value"
+        return 1
+    fi
+
+    export CADDIE_CLOUDFLARE_WRANGLER="$value"
+    caddie cli:check "Wrangler CLI set to: $value"
+    return 0
+}
+
+function caddie_cloudflare_wrangler_get() {
+    local value="${CADDIE_CLOUDFLARE_WRANGLER:-}"
+
+    if [ -n "$value" ]; then
+        caddie cli:green "Wrangler CLI: $value"
+    else
+        caddie cli:yellow "No explicit Wrangler CLI path is set"
+        caddie cli:thought "Default: ./node_modules/.bin/wrangler when present in the project"
+        caddie cli:thought "Use 'caddie cloudflare:wrangler:set <path>' to pin a compatible CLI"
+    fi
+    return 0
+}
+
+function caddie_cloudflare_wrangler_unset() {
+    if [ -n "${CADDIE_CLOUDFLARE_WRANGLER:-}" ]; then
+        unset CADDIE_CLOUDFLARE_WRANGLER
+        caddie cli:check "Wrangler CLI path unset"
+    else
+        caddie cli:yellow "No Wrangler CLI path was set"
+    fi
+    return 0
+}
+
+# --- Internal helpers ---
+
+function caddie_cloudflare_share_dir() {
+    local dir="${CADDIE_CLOUDFLARE_SHARE_DIR:-}"
+
+    if [ -z "$dir" ]; then
+        dir="$HOME/.caddie_modules/caddie-cloudflare-plugin"
+    fi
+
+    if [ ! -d "$dir/share/cloudflare-pages" ]; then
+        caddie cli:red "Error: Cloudflare plugin share directory missing: $dir/share/cloudflare-pages"
+        caddie cli:thought "Reinstall with: cd caddie-cloudflare-plugin && make install"
+        return 1
+    fi
+
+    printf '%s\n' "$dir"
+    return 0
+}
+
+function caddie_cloudflare_find_project_root() {
+    local dir="$PWD"
+
+    while [ "$dir" != "/" ]; do
+        if [ -f "$dir/caddie.cloudflare.pages.json" ]; then
+            printf '%s\n' "$dir"
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+    return 1
+}
+
+function caddie_cloudflare_require_project() {
+    local root=""
+
+    if ! root="$(caddie_cloudflare_find_project_root)"; then
+        caddie cli:red "Error: No caddie.cloudflare.pages.json found in this directory or parents"
+        caddie cli:thought "Run: caddie cloudflare:pages:config:init"
+        return 1
+    fi
+
+    printf '%s\n' "$root"
+    return 0
+}
+
+function caddie_cloudflare_resolve_node() {
+    if command -v node >/dev/null 2>&1; then
+        command -v node
+        return 0
+    fi
+
+    caddie cli:red "Error: node is required for Cloudflare Pages verification scripts"
+    return 1
+}
+
+function caddie_cloudflare_resolve_wrangler() {
+    local root="$1"
+    local pinned="${CADDIE_CLOUDFLARE_WRANGLER:-}"
+    local local_bin=""
+
+    if [ -n "$pinned" ]; then
+        if [ -x "$pinned" ]; then
+            printf '%s\n' "$pinned"
+            return 0
+        fi
+        caddie cli:red "Error: CADDIE_CLOUDFLARE_WRANGLER is set but not executable: $pinned"
+        caddie cli:thought "Fix with: caddie cloudflare:wrangler:set <path> or caddie cloudflare:wrangler:unset"
+        return 1
+    fi
+
+    local_bin="$root/node_modules/.bin/wrangler"
+    if [ -x "$local_bin" ]; then
+        printf '%s\n' "$local_bin"
+        return 0
+    fi
+
+    caddie cli:red "Error: Project-pinned Wrangler CLI not found at ./node_modules/.bin/wrangler"
+    caddie cli:thought "Install project deps so the pinned Wrangler CLI is available"
+    caddie cli:thought "Or pin explicitly: caddie cloudflare:wrangler:set <path>"
+    caddie cli:thought "Caddie will not invoke an unpinned 'latest' Wrangler from PATH automatically"
+    return 1
+}
+
+function caddie_cloudflare_config_json_get() {
+    local root="$1"
+    local key="$2"
+    local node_bin=""
+    local config_path="$root/caddie.cloudflare.pages.json"
+
+    if ! node_bin="$(caddie_cloudflare_resolve_node)"; then
+        return 1
+    fi
+
+    "$node_bin" --input-type=module -e '
+import { readFileSync } from "node:fs";
+const [path, key] = process.argv.slice(2);
+const data = JSON.parse(readFileSync(path, "utf8"));
+const value = data[key];
+if (value === undefined || value === null) process.exit(1);
+if (Array.isArray(value)) {
+  process.stdout.write(value.map(String).join("\n") + "\n");
+} else {
+  process.stdout.write(String(value) + "\n");
+}
+' "$config_path" "$key"
+    return $?
+}
+
+function caddie_cloudflare_run_script() {
+    local script_name="$1"
+    shift
+    local share=""
+    local node_bin=""
+    local script=""
+
+    if ! share="$(caddie_cloudflare_share_dir)"; then
+        return 1
+    fi
+    if ! node_bin="$(caddie_cloudflare_resolve_node)"; then
+        return 1
+    fi
+
+    script="$share/share/cloudflare-pages/scripts/$script_name"
+    if [ ! -f "$script" ]; then
+        caddie cli:red "Error: Missing plugin script: $script"
+        return 1
+    fi
+
+    "$node_bin" "$script" "$@"
+    return $?
+}
+
+function caddie_cloudflare_ensure_auth() {
+    local root="$1"
+    local wrangler="$2"
+
+    if (cd "$root" && "$wrangler" whoami --json >/dev/null 2>&1); then
+        caddie cli:check "Wrangler is authenticated"
+        return 0
+    fi
+
+    caddie cli:title "Authenticating Wrangler"
+    (cd "$root" && "$wrangler" login --use-keyring)
+    return $?
+}
+
+# --- Commands ---
+
+function caddie_cloudflare_doctor() {
+    local root=""
+    local share=""
+    local wrangler=""
+    local issues=0
+
+    caddie cli:title "Cloudflare Doctor"
+
+    if ! share="$(caddie_cloudflare_share_dir)"; then
+        issues=$((issues + 1))
+    else
+        caddie cli:check "Plugin share: $share"
+    fi
+
+    if ! command -v node >/dev/null 2>&1; then
+        caddie cli:red "node is not available"
+        issues=$((issues + 1))
+    else
+        caddie cli:check "node: $(command -v node)"
+    fi
+
+    if root="$(caddie_cloudflare_find_project_root)"; then
+        caddie cli:check "Project config: $root/caddie.cloudflare.pages.json"
+        if wrangler="$(caddie_cloudflare_resolve_wrangler "$root")"; then
+            caddie cli:check "Wrangler: $wrangler"
+        else
+            issues=$((issues + 1))
+        fi
+    else
+        caddie cli:yellow "No caddie.cloudflare.pages.json in this directory tree"
+        caddie cli:thought "Run: caddie cloudflare:pages:config:init"
+    fi
+
+    if [ "$issues" -gt 0 ]; then
+        caddie cli:red "Doctor found $issues issue(s)"
+        return 1
+    fi
+
+    caddie cli:check "Cloudflare Pages tooling looks ready"
+    return 0
+}
+
+function caddie_cloudflare_pages_config_init() {
+    local preset="${1:-simple}"
+    local target="${2:-$PWD}"
+
+    case "$preset" in
+        simple|parnotfar)
+            ;;
+        *)
+            caddie cli:red "Error: Unknown preset '$preset'"
+            caddie cli:usage "caddie cloudflare:pages:config:init [simple|parnotfar] [directory]"
+            return 1
+            ;;
+    esac
+
+    caddie cli:title "Initializing Cloudflare Pages config ($preset)"
+    if ! caddie_cloudflare_run_script "pages-config-init.mjs" "$preset" "$target"; then
+        return 1
+    fi
+    caddie cli:check "Config initialized"
+    caddie cli:thought "Edit caddie.cloudflare.pages.json, then run: caddie cloudflare:pages:setup"
+    return 0
+}
+
+function caddie_cloudflare_pages_config_show() {
+    local root=""
+
+    if ! root="$(caddie_cloudflare_require_project)"; then
+        return 1
+    fi
+
+    caddie cli:title "Cloudflare Pages config"
+    caddie cli:indent "$root/caddie.cloudflare.pages.json"
+    caddie cli:blank
+    if command -v node >/dev/null 2>&1; then
+        node --input-type=module -e '
+import { readFileSync } from "node:fs";
+process.stdout.write(readFileSync(process.argv[2], "utf8"));
+' "$root/caddie.cloudflare.pages.json"
+    else
+        cat "$root/caddie.cloudflare.pages.json"
+    fi
+    return 0
+}
+
+function caddie_cloudflare_pages_setup() {
+    local root=""
+
+    if ! root="$(caddie_cloudflare_require_project)"; then
+        return 1
+    fi
+
+    caddie cli:title "Installing SPA asset guard scaffold"
+    if ! (cd "$root" && caddie_cloudflare_run_script "pages-setup.mjs"); then
+        return 1
+    fi
+    caddie cli:check "Worker and routes scaffold written"
+    return 0
+}
+
+function caddie_cloudflare_pages_verify_build() {
+    local root=""
+    local build_command=""
+
+    if ! root="$(caddie_cloudflare_require_project)"; then
+        return 1
+    fi
+
+    if ! build_command="$(caddie_cloudflare_config_json_get "$root" "buildCommand")"; then
+        caddie cli:red "Error: Could not read buildCommand from config"
+        return 1
+    fi
+
+    caddie cli:title "Building production artifact"
+    caddie cli:indent "Running: $build_command"
+    if ! (cd "$root" && eval "$build_command"); then
+        caddie cli:red "Error: Build command failed"
+        return 1
+    fi
+
+    caddie cli:title "Verifying local production build"
+    if ! (cd "$root" && caddie_cloudflare_run_script "pages-verify-build.mjs"); then
+        caddie cli:red "Error: Local production build verification failed"
+        return 1
+    fi
+
+    caddie cli:check "Local production build verified"
+    return 0
+}
+
+function caddie_cloudflare_pages_verify_live() {
+    local root=""
+
+    if ! root="$(caddie_cloudflare_require_project)"; then
+        return 1
+    fi
+
+    caddie cli:title "Verifying live Cloudflare Pages deployment"
+    if ! (cd "$root" && caddie_cloudflare_run_script "pages-verify-live.mjs" "$@"); then
+        caddie cli:red "Error: Live deployment verification failed"
+        return 1
+    fi
+
+    caddie cli:check "Live deployment verification passed"
+    return 0
+}
+
+function caddie_cloudflare_pages_publish() {
+    local root=""
+    local wrangler=""
+    local project_name=""
+    local branch=""
+    local dist_dir=""
+
+    if ! root="$(caddie_cloudflare_require_project)"; then
+        return 1
+    fi
+    if ! wrangler="$(caddie_cloudflare_resolve_wrangler "$root")"; then
+        return 1
+    fi
+    if ! project_name="$(caddie_cloudflare_config_json_get "$root" "projectName")"; then
+        caddie cli:red "Error: Could not read projectName from config"
+        return 1
+    fi
+    if ! branch="$(caddie_cloudflare_config_json_get "$root" "productionBranch")"; then
+        branch="main"
+    fi
+    if ! dist_dir="$(caddie_cloudflare_config_json_get "$root" "distDir")"; then
+        dist_dir="dist"
+    fi
+
+    if ! caddie_cloudflare_pages_verify_build; then
+        return 1
+    fi
+
+    if ! caddie_cloudflare_ensure_auth "$root" "$wrangler"; then
+        caddie cli:red "Error: Wrangler authentication failed"
+        return 1
+    fi
+
+    caddie cli:title "Deploying to Cloudflare Pages"
+    caddie cli:indent "Project: $project_name"
+    caddie cli:indent "Branch: $branch"
+    caddie cli:indent "Directory: $dist_dir"
+
+    if ! (cd "$root" && "$wrangler" pages deploy "$dist_dir" \
+        --project-name="$project_name" \
+        --branch="$branch"); then
+        caddie cli:red "Error: Cloudflare Pages deploy failed"
+        return 1
+    fi
+
+    if ! caddie_cloudflare_pages_verify_live; then
+        caddie cli:red "Error: Publish aborted — live verification failed"
+        return 1
+    fi
+
+    caddie cli:check "Cloudflare Pages publish verified successfully"
+    return 0
+}
+
+function caddie_cloudflare_help() {
+    caddie cli:title "Cloudflare Commands"
+    caddie cli:usage "caddie cloudflare:<command>"
+    caddie cli:blank
+    caddie cli:indent "cloudflare:doctor                         Check plugin share, node, config, Wrangler"
+    caddie cli:indent "cloudflare:pages:config:init [preset]     Write caddie.cloudflare.pages.json (simple|parnotfar)"
+    caddie cli:indent "cloudflare:pages:config:show             Show project Pages config"
+    caddie cli:indent "cloudflare:pages:setup                   Write _worker.js and _routes.json scaffold"
+    caddie cli:indent "cloudflare:pages:verify-build            Build + verify local dist assets and guards"
+    caddie cli:indent "cloudflare:pages:verify-live [hosts...]  Verify live hostnames (asset MIME + missing=404)"
+    caddie cli:indent "cloudflare:pages:publish                 Build, deploy with Wrangler, verify live"
+    caddie cli:indent "cloudflare:wrangler:set <path>           Pin an explicit Wrangler CLI"
+    caddie cli:indent "cloudflare:wrangler:get                  Show pinned Wrangler path"
+    caddie cli:indent "cloudflare:wrangler:unset                Clear pinned Wrangler path"
+    caddie cli:indent "cloudflare:version                       Show plugin version"
+    caddie cli:indent "cloudflare:help                          Show this help"
+    caddie cli:blank
+    caddie cli:title "Ownership"
+    caddie cli:indent "Apps own caddie.cloudflare.pages.json, dist output, and Wrangler auth"
+    caddie cli:indent "This plugin owns publish/verify workflow and SPA asset-guard scaffolding"
+    return 0
+}
+
+function caddie_cloudflare_commands() {
+    printf '%s\n' "cloudflare:doctor cloudflare:pages:config:init cloudflare:pages:config:show cloudflare:pages:setup cloudflare:pages:verify-build cloudflare:pages:verify-live cloudflare:pages:publish cloudflare:wrangler:set cloudflare:wrangler:get cloudflare:wrangler:unset cloudflare:version cloudflare:help"
+    return 0
+}
+
+export -f caddie_cloudflare_description
+export -f caddie_cloudflare_version
+export -f caddie_cloudflare_wrangler_set
+export -f caddie_cloudflare_wrangler_get
+export -f caddie_cloudflare_wrangler_unset
+export -f caddie_cloudflare_share_dir
+export -f caddie_cloudflare_find_project_root
+export -f caddie_cloudflare_require_project
+export -f caddie_cloudflare_resolve_node
+export -f caddie_cloudflare_resolve_wrangler
+export -f caddie_cloudflare_config_json_get
+export -f caddie_cloudflare_run_script
+export -f caddie_cloudflare_ensure_auth
+export -f caddie_cloudflare_doctor
+export -f caddie_cloudflare_pages_config_init
+export -f caddie_cloudflare_pages_config_show
+export -f caddie_cloudflare_pages_setup
+export -f caddie_cloudflare_pages_verify_build
+export -f caddie_cloudflare_pages_verify_live
+export -f caddie_cloudflare_pages_publish
+export -f caddie_cloudflare_help
+export -f caddie_cloudflare_commands

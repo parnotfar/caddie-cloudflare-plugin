@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Logs and temp
+*.log
+*.tmp
+*.swp
+*~
+.tmp/
+.temp/
+coverage/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Test / local scratch
+.npm/
+.cache/
+dist/
+build/

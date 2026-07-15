@@ -1,0 +1,14 @@
+{
+  "name": "caddie-cloudflare-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Caddie plugin for Cloudflare Pages publish with SPA asset guards and live verification",
+  "scripts": {
+    "test": "node --test tests/**/*.test.mjs",
+    "lint": "caddie core:lint modules/dot_caddie_cloudflare"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
