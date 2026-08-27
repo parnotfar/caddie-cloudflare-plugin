@@ -23,7 +23,7 @@ This repository is **not** part of the core caddie.sh install. It follows the sa
 
 ## Version
 
-1.0.0
+1.1.0
 
 ## Why this exists
 
@@ -58,6 +58,7 @@ git clone https://github.com/parnotfar/caddie-cloudflare-plugin.git
 cd caddie-cloudflare-plugin
 make install
 caddie reload
+caddie cloudflare:skill:install
 caddie cloudflare:help
 ```
 
@@ -104,6 +105,10 @@ See [docs/cloudflare.md](docs/cloudflare.md) and [examples/parnotfar/](examples/
 make test
 make lint
 ```
+
+## Agent skill
+
+This plugin ships a thin `caddie-cloudflare` skill because production publish and live-verification semantics require more than command discovery. Install its canonical links for Cursor, Codex, and Claude with `caddie cloudflare:skill:install`.
 
 ## Remaining Cloudflare Pages limitations
 

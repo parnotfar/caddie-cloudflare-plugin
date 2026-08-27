@@ -5,7 +5,7 @@
 
 source "$HOME/.caddie_modules/.caddie_cli"
 
-CADDIE_CLOUDFLARE_PLUGIN_VERSION="1.0.0"
+CADDIE_CLOUDFLARE_PLUGIN_VERSION="1.1.0"
 CADDIE_CLOUDFLARE_SHARE_DIR="${CADDIE_CLOUDFLARE_SHARE_DIR:-$HOME/.caddie_modules/caddie-cloudflare-plugin}"
 
 function caddie_cloudflare_description() {
@@ -412,6 +412,71 @@ function caddie_cloudflare_pages_publish() {
     return 0
 }
 
+function caddie_cloudflare_skill_canonical_dir() {
+    local modules_dir="${CADDIE_MODULES_DIR:-$HOME/.caddie_modules}"
+    printf '%s\n' "${modules_dir}/skills/caddie-cloudflare"
+    return 0
+}
+
+function caddie_cloudflare_skill_install_link() {
+    local link_path="$1"
+    local label="$2"
+    local canonical=""
+
+    canonical="$(caddie_cloudflare_skill_canonical_dir)"
+    if [ ! -f "${canonical}/SKILL.md" ]; then
+        caddie cli:red "Error: caddie-cloudflare skill package is missing"
+        caddie cli:thought "Run make install from caddie-cloudflare-plugin"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$link_path")"
+    if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        caddie cli:red "Error: ${link_path} exists and is not a symlink"
+        return 1
+    fi
+    if [ -L "$link_path" ]; then
+        rm -f "$link_path"
+    fi
+    if ! ln -s "$canonical" "$link_path"; then
+        caddie cli:red "Error: Failed to link ${label} skill"
+        return 1
+    fi
+
+    caddie cli:check "Linked ${label} skill"
+    caddie cli:indent "${link_path} → ${canonical}"
+    return 0
+}
+
+function caddie_cloudflare_skill_install() {
+    caddie_cloudflare_skill_install_all
+    return $?
+}
+
+function caddie_cloudflare_skill_install_cursor() {
+    caddie_cloudflare_skill_install_link "$HOME/.cursor/skills/caddie-cloudflare" "Cursor"
+    return $?
+}
+
+function caddie_cloudflare_skill_install_codex() {
+    caddie_cloudflare_skill_install_link "$HOME/.codex/skills/caddie-cloudflare" "Codex"
+    return $?
+}
+
+function caddie_cloudflare_skill_install_claude() {
+    caddie_cloudflare_skill_install_link "$HOME/.claude/skills/caddie-cloudflare" "Claude"
+    return $?
+}
+
+function caddie_cloudflare_skill_install_all() {
+    local overall=0
+
+    caddie_cloudflare_skill_install_cursor || overall=1
+    caddie_cloudflare_skill_install_codex || overall=1
+    caddie_cloudflare_skill_install_claude || overall=1
+    return "$overall"
+}
+
 function caddie_cloudflare_help() {
     caddie cli:title "Cloudflare Commands"
     caddie cli:usage "caddie cloudflare:<command>"
@@ -423,6 +488,10 @@ function caddie_cloudflare_help() {
     caddie cli:indent "cloudflare:pages:verify-build            Build + verify local dist assets and guards"
     caddie cli:indent "cloudflare:pages:verify-live [hosts...]  Verify live hostnames (asset MIME + missing=404)"
     caddie cli:indent "cloudflare:pages:publish                 Build, deploy with Wrangler, verify live"
+    caddie cli:indent "cloudflare:skill:install                 Link skill for Cursor, Codex, and Claude"
+    caddie cli:indent "cloudflare:skill:install:cursor          Link ~/.cursor/skills/caddie-cloudflare"
+    caddie cli:indent "cloudflare:skill:install:codex           Link ~/.codex/skills/caddie-cloudflare"
+    caddie cli:indent "cloudflare:skill:install:claude          Link ~/.claude/skills/caddie-cloudflare"
     caddie cli:indent "cloudflare:wrangler:set <path>           Pin an explicit Wrangler CLI"
     caddie cli:indent "cloudflare:wrangler:get                  Show pinned Wrangler path"
     caddie cli:indent "cloudflare:wrangler:unset                Clear pinned Wrangler path"
@@ -436,29 +505,9 @@ function caddie_cloudflare_help() {
 }
 
 function caddie_cloudflare_commands() {
-    printf '%s\n' "cloudflare:doctor cloudflare:pages:config:init cloudflare:pages:config:show cloudflare:pages:setup cloudflare:pages:verify-build cloudflare:pages:verify-live cloudflare:pages:publish cloudflare:wrangler:set cloudflare:wrangler:get cloudflare:wrangler:unset cloudflare:version cloudflare:help"
+    printf '%s\n' "cloudflare:doctor cloudflare:pages:config:init cloudflare:pages:config:show cloudflare:pages:setup cloudflare:pages:verify-build cloudflare:pages:verify-live cloudflare:pages:publish cloudflare:skill:install cloudflare:skill:install:all cloudflare:skill:install:cursor cloudflare:skill:install:codex cloudflare:skill:install:claude cloudflare:wrangler:set cloudflare:wrangler:get cloudflare:wrangler:unset cloudflare:version cloudflare:help"
     return 0
 }
 
-export -f caddie_cloudflare_description
-export -f caddie_cloudflare_version
-export -f caddie_cloudflare_wrangler_set
-export -f caddie_cloudflare_wrangler_get
-export -f caddie_cloudflare_wrangler_unset
-export -f caddie_cloudflare_share_dir
-export -f caddie_cloudflare_find_project_root
-export -f caddie_cloudflare_require_project
-export -f caddie_cloudflare_resolve_node
-export -f caddie_cloudflare_resolve_wrangler
-export -f caddie_cloudflare_config_json_get
-export -f caddie_cloudflare_run_script
-export -f caddie_cloudflare_ensure_auth
-export -f caddie_cloudflare_doctor
-export -f caddie_cloudflare_pages_config_init
-export -f caddie_cloudflare_pages_config_show
-export -f caddie_cloudflare_pages_setup
-export -f caddie_cloudflare_pages_verify_build
-export -f caddie_cloudflare_pages_verify_live
-export -f caddie_cloudflare_pages_publish
-export -f caddie_cloudflare_help
-export -f caddie_cloudflare_commands
+# Do not export -f. Functions are available in any shell that sources this module.
+# Child shells should invoke ~/bin/caddie or caddie agent:exec.

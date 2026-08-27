@@ -1,5 +1,15 @@
 # caddie-cloudflare-plugin Release Notes
 
+## Version 1.1.0 - Thin agent skill
+
+**Release Date:** August 27, 2026
+
+- Added the `caddie-cloudflare` skill for production publish, pinned Wrangler, and live-verification policy.
+- Added skill installers for Cursor, Codex, and Claude.
+- Removed legacy `export -f` declarations; child shells use `caddie agent:exec`.
+
+---
+
 ## Version 1.0.0 - Cloudflare Pages publish with SPA asset guards
 
 **Release Date:** July 14, 2026

@@ -2,6 +2,8 @@ MODULE_HOME ?= $(HOME)/.caddie_modules
 MODULE_DEST := $(MODULE_HOME)/.caddie_cloudflare
 MODULE_SRC_DEST := $(MODULE_HOME)/caddie-cloudflare-plugin
 SRC_MODULE := modules/dot_caddie_cloudflare
+SKILL_SRC := skills/caddie-cloudflare
+SKILL_DEST := $(MODULE_HOME)/skills/caddie-cloudflare
 
 .PHONY: help install uninstall lint test
 
@@ -15,7 +17,7 @@ help:
 		'  make test       Run Node unit tests'
 
 install:
-	@mkdir -p "$(MODULE_HOME)"
+	@mkdir -p "$(MODULE_HOME)" "$(MODULE_HOME)/skills"
 	@echo "==> Installing module to $(MODULE_DEST)"
 	cp "$(SRC_MODULE)" "$(MODULE_DEST)"
 	chmod +x "$(MODULE_DEST)"
@@ -24,13 +26,17 @@ install:
 	mkdir -p "$(MODULE_SRC_DEST)"
 	cp -R share "$(MODULE_SRC_DEST)/"
 	cp package.json "$(MODULE_SRC_DEST)/"
+	rm -rf "$(SKILL_DEST)"
+	cp -R "$(SKILL_SRC)" "$(SKILL_DEST)"
 	@echo "Installed caddie cloudflare module to $(MODULE_DEST)"
 	@echo "Share scripts: $(MODULE_SRC_DEST)/share/cloudflare-pages"
 	@echo "Run: caddie reload"
+	@echo "Then: caddie cloudflare:skill:install"
 
 uninstall:
 	@if [ -f "$(MODULE_DEST)" ]; then rm "$(MODULE_DEST)" && echo "Removed $(MODULE_DEST)"; fi
 	@if [ -d "$(MODULE_SRC_DEST)" ]; then rm -rf "$(MODULE_SRC_DEST)" && echo "Removed $(MODULE_SRC_DEST)"; fi
+	@if [ -d "$(SKILL_DEST)" ]; then rm -rf "$(SKILL_DEST)" && echo "Removed $(SKILL_DEST)"; fi
 
 lint:
 	caddie core:lint "$(SRC_MODULE)"
