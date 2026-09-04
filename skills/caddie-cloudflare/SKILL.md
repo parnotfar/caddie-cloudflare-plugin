@@ -1,7 +1,7 @@
 ---
 name: caddie-cloudflare
 description: Cloudflare Pages publish and verification plugin for Caddie. Use when configuring, verifying, or publishing Pages projects through caddie cloudflare:* commands.
-caddie-cloudflare-version: "1.1.0"
+caddie-cloudflare-version: "1.2.0"
 ---
 
 # caddie-cloudflare
@@ -11,6 +11,8 @@ Optional plugin. Discover commands with `caddie cloudflare:help` or `caddie agen
 ```bash
 caddie agent:exec cloudflare:<command> [args]
 ```
+
+For command or namespace help, use either `caddie agent:exec cloudflare:<command> --help` or the symmetric `:<command>:help` form. Core Caddie generates this help from the installed module metadata.
 
 ## Agent rules
 

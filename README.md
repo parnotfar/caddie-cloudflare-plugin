@@ -21,9 +21,11 @@ This repository is **not** part of the core caddie.sh install. It follows the sa
 5. Agents discover with `caddie cloudflare:help` or `caddie agent:exec core:module:commands cloudflare`
 6. Versioned independently of `CADDIE_SH_VERSION`
 
+Requires caddie.sh 11.5.0 or later for generated command and namespace help. Every registered command supports both `caddie cloudflare:<command> --help` and `caddie cloudflare:<command>:help`; the module's overview remains `caddie cloudflare:help`.
+
 ## Version
 
-1.1.0
+1.2.0
 
 ## Why this exists
 

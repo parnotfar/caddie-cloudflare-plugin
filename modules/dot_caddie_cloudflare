@@ -5,7 +5,7 @@
 
 source "$HOME/.caddie_modules/.caddie_cli"
 
-CADDIE_CLOUDFLARE_PLUGIN_VERSION="1.1.0"
+CADDIE_CLOUDFLARE_PLUGIN_VERSION="1.2.0"
 CADDIE_CLOUDFLARE_SHARE_DIR="${CADDIE_CLOUDFLARE_SHARE_DIR:-$HOME/.caddie_modules/caddie-cloudflare-plugin}"
 
 function caddie_cloudflare_description() {
@@ -507,6 +507,19 @@ function caddie_cloudflare_help() {
 function caddie_cloudflare_commands() {
     printf '%s\n' "cloudflare:doctor cloudflare:pages:config:init cloudflare:pages:config:show cloudflare:pages:setup cloudflare:pages:verify-build cloudflare:pages:verify-live cloudflare:pages:publish cloudflare:skill:install cloudflare:skill:install:all cloudflare:skill:install:cursor cloudflare:skill:install:codex cloudflare:skill:install:claude cloudflare:wrangler:set cloudflare:wrangler:get cloudflare:wrangler:unset cloudflare:version cloudflare:help"
     return 0
+}
+
+function caddie_cloudflare_command_help() {
+    if [ "${1:-}" = "cloudflare:help" ]; then
+        caddie_cloudflare_help
+        return $?
+    fi
+    if declare -F _caddie_default_command_help >/dev/null 2>&1; then
+        _caddie_default_command_help "${1:-}"
+        return $?
+    fi
+    caddie_cloudflare_help
+    return $?
 }
 
 # Do not export -f. Functions are available in any shell that sources this module.

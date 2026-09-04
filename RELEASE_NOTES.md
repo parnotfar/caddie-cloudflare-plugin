@@ -1,5 +1,13 @@
 # caddie-cloudflare-plugin Release Notes
 
+## Version 1.2.0 - Core command-help harness
+
+**Released:** September 4, 2026
+
+- Adopted the caddie.sh 11.5 command-help hook while keeping Cloudflare-specific guidance in the supplemental skill.
+- Documented symmetric `--help` and `:help` forms for commands and namespaces.
+- Kept live module discovery authoritative instead of duplicating the command catalog in the skill.
+
 ## Version 1.1.0 - Thin agent skill
 
 **Release Date:** August 27, 2026

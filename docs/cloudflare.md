@@ -2,6 +2,8 @@
 
 Optional Caddie plugin for Cloudflare Pages publishing with SPA asset guards.
 
+Requires caddie.sh 11.5.0 or later. Use either `caddie cloudflare:<command> --help` or `caddie cloudflare:<command>:help` for generated command help, including namespace summaries such as `caddie cloudflare:pages:help`.
+
 ## Project config
 
 Create `caddie.cloudflare.pages.json` at the application repository root:
